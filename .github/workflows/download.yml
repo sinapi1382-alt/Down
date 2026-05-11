@@ -1,0 +1,47 @@
+name: Download File from URL
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'لینک دانلود (چند تا رو با فاصله جدا کن)'
+        required: true
+        type: string
+      password:
+        description: 'رمز فایل (اختیاری)'
+        required: false
+        type: string
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: دریافت کدها
+      uses: actions/checkout@v4
+    
+    - name: نصب ابزارها
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y aria2 zip
+        
+    - name: اجرای دانلودر
+      run: |
+        mkdir -p downloads
+        cd downloads
+        
+        for URL in ${{ github.event.inputs.urls }}; do
+          echo "در حال دانلود: $URL"
+          FILENAME=$(basename "$URL" | cut -d '?' -f1)
+          aria2c -x 16 -s 16 -o "$FILENAME" "$URL"
+        done
+        
+        if [ -n "${{ github.event.inputs.password }}" ]; then
+          zip -P "${{ github.event.inputs.password }}" -r downloaded.zip .
+        fi
+    
+    - name: آپلود فایل‌ها
+      uses: actions/upload-artifact@v4
+      with:
+        name: Downloads
+        path: downloads/
