@@ -1,14 +1,14 @@
-name: Download File from URL
+name: دانلودر حرفه‌ای فایل
 
 on:
   workflow_dispatch:
     inputs:
       urls:
-        description: 'لینک دانلود (چند تا رو با فاصله جدا کن)'
+        description: 'لینک‌های دانلود (با فاصله جدا کن)'
         required: true
         type: string
       password:
-        description: 'رمز فایل (اختیاری)'
+        description: 'رمز فایل زیپ (اختیاری)'
         required: false
         type: string
 
@@ -17,60 +17,82 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: دریافت کدها
+    - name: دریافت کدهای ریپازیتوری
       uses: actions/checkout@v4
     
-    - name: نصب ابزارها
+    - name: نصب ابزارهای مورد نیاز
       run: |
         sudo apt-get update
-        sudo apt-get install -y aria2 zip
+        sudo apt-get install -y aria2 zip unzip
         
-    - name: ساخت پوشه دانلود و شروع دانلود
+    - name: اجرای دانلودر
       run: |
-        # اول پوشه رو بساز
+        # ساخت پوشه download اگه وجود نداشته باشه
         mkdir -p downloads
         
-        # برو داخل پوشه
+        # رفتن به داخل پوشه
         cd downloads
         
-        # حالا دانلود کن
+        # دانلود هر لینک
         for URL in ${{ github.event.inputs.urls }}; do
+          echo "========================================="
           echo "📥 در حال دانلود: $URL"
-          FILENAME=$(basename "$URL" | cut -d '?' -f1)
-          aria2c -x 16 -s 16 -o "$FILENAME" "$URL"
+          echo "========================================="
           
-          if [ -f "$FILENAME" ]; then
-            echo "✅ دانلود شد: $FILENAME"
+          # گرفتن نام فایل از لینک
+          FILENAME=$(basename "$URL" | cut -d '?' -f1 | cut -d '#' -f1)
+          
+          # دانلود با aria2 (فقط لینک‌های http/https)
+          if [[ "$URL" == http* ]]; then
+            aria2c -x 16 -s 16 -k 1M \
+                   --max-connection-per-server=16 \
+                   --console-log-level=error \
+                   --summary-interval=0 \
+                   --allow-overwrite=true \
+                   -o "$FILENAME" \
+                   "$URL" || {
+                     echo "❌ خطا در دانلود: $URL"
+                     continue
+                   }
           else
-            echo "❌ خطا در دانلود: $URL"
+            echo "❌ لینک نامعتبر: $URL"
+            continue
           fi
+          
+          # بررسی موفقیت دانلود
+          if [ -f "$FILENAME" ] && [ -s "$FILENAME" ]; then
+            SIZE=$(du -h "$FILENAME" | cut -f1)
+            echo "✅ دانلود شد: $FILENAME (حجم: $SIZE)"
+          else
+            echo "❌ فایل دانلود نشد یا خالی است: $FILENAME"
+          fi
+          
+          echo ""
         done
         
-        # برگرد به پوشه اصلی
+        # برگشت به پوشه اصلی
         cd ..
         
-        # اگه رمز داده شده بود، فایل رو رمزگذاری کن
+        # رمزگذاری با زیپ اگه رمز داده شده بود
         if [ -n "${{ github.event.inputs.password }}" ]; then
-          echo "🔒 در حال رمزگذاری فایل‌ها..."
+          echo "========================================="
+          echo "🔒 رمزگذاری فایل‌ها با رمز وارد شده"
+          echo "========================================="
           cd downloads
-          zip -P "${{ github.event.inputs.password }}" -r downloaded_files.zip .
-          rm -f * 2>/dev/null || true
-          mv downloaded_files.zip .
+          zip -P "${{ github.event.inputs.password }}" -r protected_files.zip . -x "*.zip"
+          find . -type f ! -name "protected_files.zip" -delete
           cd ..
         fi
         
-        # نشون بده چه فایل‌هایی داریم
+        # نمایش نتیجه نهایی
+        echo "========================================="
         echo "📂 فایل‌های موجود در پوشه downloads:"
+        echo "========================================="
         ls -la downloads/
         
-        # اگه پوشه خالیه، خطا بده
-        if [ -z "$(ls -A downloads/)" ]; then
-          echo "❌ خطا: پوشه downloads خالی است. دانلودی انجام نشده."
-          exit 1
-        fi
-    
-    - name: آپلود فایل‌ها
+    - name: آپلود فایل‌ها به عنوان Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Downloads
+        name: فایل‌های-دانلودی
         path: downloads/
+        if-no-files-found: error
