@@ -29,18 +29,16 @@ jobs:
         
     - name: دانلود و پردازش
       run: |
-        # پاک کردن پوشه قبلی
         rm -rf downloads
         mkdir -p downloads
         cd downloads
         
         URL="${{ github.event.inputs.urls }}"
         
-        echo "========================================="
-        echo "📥 دانلود از: $URL"
-        echo "========================================="
+        echo "================================"
+        echo "Downloading: $URL"
+        echo "================================"
         
-        # دانلود فایل
         FILENAME=$(basename "$URL" | cut -d '?' -f1 | cut -d '#' -f1)
         aria2c -x 16 -s 16 -k 1M \
                --console-log-level=error \
@@ -49,80 +47,72 @@ jobs:
                "$URL"
         
         echo ""
-        echo "========================================="
-        echo "📦 زیپ کردن فایل"
-        echo "========================================="
+        echo "================================"
+        echo "Creating zip file"
+        echo "================================"
         
-        # زیپ کردن فایل دانلودی
         if [ -f "$FILENAME" ] && [ -s "$FILENAME" ]; then
           SIZE=$(du -h "$FILENAME" | cut -f1)
           
           if [ -n "${{ github.event.inputs.password }}" ]; then
-            zip -P "${{ github.event.inputs.password }}" "دانلود.zip" "$FILENAME"
-            echo "✅ فایل زیپ شد با رمز: دانلود.zip (حجم اصلی: $SIZE)"
+            zip -P "${{ github.event.inputs.password }}" "download.zip" "$FILENAME"
+            echo "Created: download.zip with password"
           else
-            zip "دانلود.zip" "$FILENAME"
-            echo "✅ فایل زیپ شد: دانلود.zip (حجم اصلی: $SIZE)"
+            zip "download.zip" "$FILENAME"
+            echo "Created: download.zip"
           fi
           
-          # حذف فایل اصلی
           rm "$FILENAME"
         else
-          echo "❌ خطا در دانلود"
+          echo "Download failed!"
           exit 1
         fi
         
-        # ساختن فایل لیست (با فرمت txt برای دانلود آسان)
-        echo "📋 ایجاد فایل لیست قابل دانلود..."
+        echo ""
+        echo "================================"
+        echo "Creating list file"
+        echo "================================"
         
-        cat > "لیست_دانلود.txt" << EOF
-=========================================
-لیست فایل‌های دانلود شده
-=========================================
-
-تاریخ: $(date '+%Y-%m-%d %H:%M:%S')
-لینک اصلی: $URL
-
-----------------------------------------
-فایل‌های موجود:
-----------------------------------------
-
-$(ls -lh *.zip 2>/dev/null)
-
-----------------------------------------
-رمز فایل: ${{ github.event.inputs.password || 'بدون رمز' }}
-حجم کل: $(du -sh . | cut -f1)
-=========================================
-EOF
+        echo "=========================================" > list.txt
+        echo "Downloaded Files List" >> list.txt
+        echo "=========================================" >> list.txt
+        echo "" >> list.txt
+        echo "Date: $(date '+%Y-%m-%d %H:%M:%S')" >> list.txt
+        echo "Source URL: $URL" >> list.txt
+        echo "" >> list.txt
+        echo "Files:" >> list.txt
+        echo "----------------------------------------" >> list.txt
+        ls -lh *.zip >> list.txt
+        echo "" >> list.txt
+        echo "Password: ${{ github.event.inputs.password || 'No password' }}" >> list.txt
+        echo "Total size: $(du -sh . | cut -f1)" >> list.txt
+        echo "=========================================" >> list.txt
         
-        # نمایش محتوای لیست برای اطمینان
-        cat "لیست_دانلود.txt"
+        cat list.txt
         
         cd ..
         
-        # ذخیره در ریپازیتوری
         echo ""
-        echo "💾 ذخیره در ریپازیتوری..."
+        echo "Saving to repository..."
         git config user.name "github-actions[bot]"
         git config user.email "actions@github.com"
         git add downloads/
         git commit -m "Add downloaded files $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes"
         git push
         
-        # نمایش نتیجه
         echo ""
-        echo "========================================="
-        echo "✅ دانلود کامل شد!"
-        echo "========================================="
-        echo "📂 فایل‌ها در پوشه downloads:"
+        echo "================================"
+        echo "Done!"
+        echo "================================"
+        echo "Files in downloads folder:"
         ls -la downloads/
         echo ""
-        echo "📄 برای دانلود فایل لیست:"
-        echo "به ریپازیتوری → پوشه downloads → کلیک روی لیست_دانلود.txt → دکمه Download"
-        echo "========================================="
+        echo "To download list file:"
+        echo "Go to repository -> downloads folder -> list.txt -> Download button"
+        echo "================================"
     
-    - name: آپلود Artifact
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: فایل‌های-دانلود-شده
+        name: Downloaded-Files
         path: downloads/
