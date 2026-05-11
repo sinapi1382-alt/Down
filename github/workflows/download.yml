@@ -1,11 +1,37 @@
-name: تست ساده
+name: دانلودر سریع
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
+  download:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
     steps:
-      - name: سلام
-        run: echo "Hello World"
+    - name: دریافت کدها
+      uses: actions/checkout@v4
+    
+    - name: نصب ابزارها
+      run: sudo apt-get install -y aria2 zip
+    
+    - name: دانلود
+      run: |
+        mkdir -p downloads
+        cd downloads
+        aria2c -x 16 -s 16 -o "file.bin" "https://nbg1-speed.hetzner.com/10MB.bin"
+        zip download.zip file.bin
+        rm file.bin
+        cd ..
+        git config user.name "actions"
+        git config user.email "actions@github.com"
+        git add downloads/
+        git commit -m "add" || echo "ok"
+        git push
+    
+    - name: آپلود
+      uses: actions/upload-artifact@v4
+      with:
+        name: files
+        path: downloads/
