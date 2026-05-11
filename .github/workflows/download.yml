@@ -25,15 +25,15 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y aria2 zip
         
-    - name: ساخت پوشه دانلود
+    - name: ساخت پوشه دانلود و شروع دانلود
       run: |
+        # اول پوشه رو بساز
         mkdir -p downloads
-        echo "✅ پوشه downloads ساخته شد"
         
-    - name: اجرای دانلودر
-      run: |
+        # برو داخل پوشه
         cd downloads
         
+        # حالا دانلود کن
         for URL in ${{ github.event.inputs.urls }}; do
           echo "📥 در حال دانلود: $URL"
           FILENAME=$(basename "$URL" | cut -d '?' -f1)
@@ -46,17 +46,28 @@ jobs:
           fi
         done
         
+        # برگرد به پوشه اصلی
         cd ..
         
+        # اگه رمز داده شده بود، فایل رو رمزگذاری کن
         if [ -n "${{ github.event.inputs.password }}" ]; then
           echo "🔒 در حال رمزگذاری فایل‌ها..."
           cd downloads
-          zip -P "${{ github.event.inputs.password }}" -r downloaded.zip .
+          zip -P "${{ github.event.inputs.password }}" -r downloaded_files.zip .
+          rm -f * 2>/dev/null || true
+          mv downloaded_files.zip .
           cd ..
         fi
         
-        echo "📂 فایل‌ها در پوشه downloads ذخیره شدن"
+        # نشون بده چه فایل‌هایی داریم
+        echo "📂 فایل‌های موجود در پوشه downloads:"
         ls -la downloads/
+        
+        # اگه پوشه خالیه، خطا بده
+        if [ -z "$(ls -A downloads/)" ]; then
+          echo "❌ خطا: پوشه downloads خالی است. دانلودی انجام نشده."
+          exit 1
+        fi
     
     - name: آپلود فایل‌ها
       uses: actions/upload-artifact@v4
