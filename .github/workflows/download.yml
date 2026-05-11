@@ -25,20 +25,38 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y aria2 zip
         
-    - name: اجرای دانلودر
+    - name: ساخت پوشه دانلود
       run: |
         mkdir -p downloads
+        echo "✅ پوشه downloads ساخته شد"
+        
+    - name: اجرای دانلودر
+      run: |
         cd downloads
         
         for URL in ${{ github.event.inputs.urls }}; do
-          echo "در حال دانلود: $URL"
+          echo "📥 در حال دانلود: $URL"
           FILENAME=$(basename "$URL" | cut -d '?' -f1)
           aria2c -x 16 -s 16 -o "$FILENAME" "$URL"
+          
+          if [ -f "$FILENAME" ]; then
+            echo "✅ دانلود شد: $FILENAME"
+          else
+            echo "❌ خطا در دانلود: $URL"
+          fi
         done
         
+        cd ..
+        
         if [ -n "${{ github.event.inputs.password }}" ]; then
+          echo "🔒 در حال رمزگذاری فایل‌ها..."
+          cd downloads
           zip -P "${{ github.event.inputs.password }}" -r downloaded.zip .
+          cd ..
         fi
+        
+        echo "📂 فایل‌ها در پوشه downloads ذخیره شدن"
+        ls -la downloads/
     
     - name: آپلود فایل‌ها
       uses: actions/upload-artifact@v4
