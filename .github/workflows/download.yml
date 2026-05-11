@@ -1,14 +1,14 @@
-name: دانلودر با فایل لیست قابل دانلود
+name: Downloader
 
 on:
   workflow_dispatch:
     inputs:
       urls:
-        description: 'لینک دانلود (فقط یک لینک)'
+        description: 'Download URL'
         required: true
         type: string
       password:
-        description: 'رمز فایل زیپ (اختیاری)'
+        description: 'Zip password (optional)'
         required: false
         type: string
 
@@ -19,107 +19,51 @@ jobs:
       contents: write
     
     steps:
-    - name: دریافت کدها
-      uses: actions/checkout@v4
-    
-    - name: نصب ابزارها
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y aria2 zip
-        
-    - name: دانلود و پردازش
-      run: |
-        rm -rf downloads
-        mkdir -p downloads
-        cd downloads
-        
-        URL="${{ github.event.inputs.urls }}"
-        PASS="${{ github.event.inputs.password }}"
-        
-        echo "================================"
-        echo "Downloading: $URL"
-        echo "================================"
-        
-        FILENAME=$(basename "$URL" | cut -d '?' -f1 | cut -d '#' -f1)
-        aria2c -x 16 -s 16 -k 1M \
-               --console-log-level=error \
-               --allow-overwrite=true \
-               -o "$FILENAME" \
-               "$URL"
-        
-        echo ""
-        echo "================================"
-        echo "Creating zip file"
-        echo "================================"
-        
-        if [ -f "$FILENAME" ] && [ -s "$FILENAME" ]; then
-          SIZE=$(du -h "$FILENAME" | cut -f1)
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 zip
+      
+      - name: Download and process
+        run: |
+          rm -rf downloads
+          mkdir -p downloads
+          cd downloads
           
-          if [ -n "$PASS" ]; then
-            zip -P "$PASS" "download.zip" "$FILENAME"
-            echo "Created: download.zip with password"
-          else
-            zip "download.zip" "$FILENAME"
-            echo "Created: download.zip"
+          URL="${{ inputs.urls }}"
+          PASS="${{ inputs.password }}"
+          
+          echo "Downloading: $URL"
+          
+          FILENAME=$(basename "$URL" | cut -d '?' -f1)
+          aria2c -x 16 -s 16 -o "$FILENAME" "$URL"
+          
+          if [ -f "$FILENAME" ]; then
+            if [ -n "$PASS" ]; then
+              zip -P "$PASS" "download.zip" "$FILENAME"
+            else
+              zip "download.zip" "$FILENAME"
+            fi
+            rm "$FILENAME"
           fi
           
-          rm "$FILENAME"
-        else
-          echo "Download failed!"
-          exit 1
-        fi
-        
-        echo ""
-        echo "================================"
-        echo "Creating list file"
-        echo "================================"
-        
-        echo "=========================================" > list.txt
-        echo "Downloaded Files List" >> list.txt
-        echo "=========================================" >> list.txt
-        echo "" >> list.txt
-        echo "Date: $(date '+%Y-%m-%d %H:%M:%S')" >> list.txt
-        echo "Source URL: $URL" >> list.txt
-        echo "" >> list.txt
-        echo "Files:" >> list.txt
-        echo "----------------------------------------" >> list.txt
-        ls -lh *.zip >> list.txt
-        echo "" >> list.txt
-        
-        if [ -n "$PASS" ]; then
+          echo "File list:" > list.txt
+          ls -lh >> list.txt
           echo "Password: $PASS" >> list.txt
-        else
-          echo "Password: No password" >> list.txt
-        fi
-        
-        echo "Total size: $(du -sh . | cut -f1)" >> list.txt
-        echo "=========================================" >> list.txt
-        
-        cat list.txt
-        
-        cd ..
-        
-        echo ""
-        echo "Saving to repository..."
-        git config user.name "github-actions[bot]"
-        git config user.email "actions@github.com"
-        git add downloads/
-        git commit -m "Add downloaded files $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes"
-        git push
-        
-        echo ""
-        echo "================================"
-        echo "Done!"
-        echo "================================"
-        echo "Files in downloads folder:"
-        ls -la downloads/
-        echo ""
-        echo "To download list file:"
-        echo "Go to repository -> downloads folder -> list.txt -> Download button"
-        echo "================================"
-    
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: Downloaded-Files
-        path: downloads/
+          
+          cd ..
+          
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add downloads/
+          git commit -m "Add files" || echo "No changes"
+          git push
+      
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Downloads
+          path: downloads/
