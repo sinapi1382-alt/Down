@@ -1,4 +1,4 @@
-name: دانلودر حرفه‌ای فایل
+name: دانلودر با تقسیم خودکار ۵۰ مگابایت
 
 on:
   workflow_dispatch:
@@ -15,6 +15,8 @@ on:
 jobs:
   download:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
     - name: دریافت کدهای ریپازیتوری
@@ -23,76 +25,82 @@ jobs:
     - name: نصب ابزارهای مورد نیاز
       run: |
         sudo apt-get update
-        sudo apt-get install -y aria2 zip unzip
-        
-    - name: اجرای دانلودر
+        sudo apt-get install -y aria2 zip unzip rar
+    
+    - name: ساخت پوشه و دانلود
       run: |
-        # ساخت پوشه download اگه وجود نداشته باشه
+        # پاک کردن پوشه قبلی
+        rm -rf downloads
         mkdir -p downloads
         
-        # رفتن به داخل پوشه
         cd downloads
         
         # دانلود هر لینک
         for URL in ${{ github.event.inputs.urls }}; do
-          echo "========================================="
-          echo "📥 در حال دانلود: $URL"
-          echo "========================================="
-          
-          # گرفتن نام فایل از لینک
+          echo "📥 دانلود: $URL"
           FILENAME=$(basename "$URL" | cut -d '?' -f1 | cut -d '#' -f1)
           
-          # دانلود با aria2 (فقط لینک‌های http/https)
           if [[ "$URL" == http* ]]; then
             aria2c -x 16 -s 16 -k 1M \
-                   --max-connection-per-server=16 \
                    --console-log-level=error \
-                   --summary-interval=0 \
                    --allow-overwrite=true \
                    -o "$FILENAME" \
-                   "$URL" || {
-                     echo "❌ خطا در دانلود: $URL"
-                     continue
-                   }
-          else
-            echo "❌ لینک نامعتبر: $URL"
-            continue
+                   "$URL"
           fi
-          
-          # بررسی موفقیت دانلود
-          if [ -f "$FILENAME" ] && [ -s "$FILENAME" ]; then
-            SIZE=$(du -h "$FILENAME" | cut -f1)
-            echo "✅ دانلود شد: $FILENAME (حجم: $SIZE)"
-          else
-            echo "❌ فایل دانلود نشد یا خالی است: $FILENAME"
-          fi
-          
-          echo ""
         done
         
-        # برگشت به پوشه اصلی
         cd ..
         
-        # رمزگذاری با زیپ اگه رمز داده شده بود
-        if [ -n "${{ github.event.inputs.password }}" ]; then
-          echo "========================================="
-          echo "🔒 رمزگذاری فایل‌ها با رمز وارد شده"
-          echo "========================================="
-          cd downloads
-          zip -P "${{ github.event.inputs.password }}" -r protected_files.zip . -x "*.zip"
-          find . -type f ! -name "protected_files.zip" -delete
-          cd ..
-        fi
+        # تقسیم فایل‌ها به بخش‌های 50 مگابایتی
+        echo "✂️ تقسیم فایل‌ها به بخش‌های 50 مگابایتی..."
+        cd downloads
         
-        # نمایش نتیجه نهایی
+        for FILE in *; do
+          if [ -f "$FILE" ] && [ ! "$FILE" == "*.zip" ]; then
+            # گرفتن حجم فایل به بایت
+            SIZE=$(stat -c%s "$FILE")
+            SIZE_MB=$((SIZE / 1024 / 1024))
+            
+            if [ $SIZE_MB -gt 50 ]; then
+              echo "📦 فایل $FILE حجم: ${SIZE_MB}MB - در حال تقسیم..."
+              
+              # زیپ کردن با رمز اگه داده شده
+              if [ -n "${{ github.event.inputs.password }}" ]; then
+                zip -P "${{ github.event.inputs.password }}" -s 50m -r "${FILE}.zip" "$FILE"
+                rm "$FILE"
+                echo "✅ تقسیم شد: ${FILE}.zip (بخش‌های 50 مگابایتی با رمز)"
+              else
+                zip -s 50m -r "${FILE}.zip" "$FILE"
+                rm "$FILE"
+                echo "✅ تقسیم شد: ${FILE}.zip (بخش‌های 50 مگابایتی)"
+              fi
+            else
+              # فایل کوچک‌تر از 50 مگابایت
+              if [ -n "${{ github.event.inputs.password }}" ]; then
+                zip -P "${{ github.event.inputs.password }}" "${FILE}.zip" "$FILE"
+                rm "$FILE"
+              fi
+            fi
+          fi
+        done
+        
+        cd ..
+        
+        # ذخیره در ریپازیتوری
+        echo "💾 ذخیره فایل‌ها در ریپازیتوری..."
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add downloads/
+        git commit -m "Add downloaded files $(date +'%Y-%m-%d %H:%M:%S')" || echo "تغییری برای کامیت وجود ندارد"
+        git push
+        
         echo "========================================="
-        echo "📂 فایل‌های موجود در پوشه downloads:"
+        echo "✅ فایل‌ها در پوشه downloads ذخیره شدند"
         echo "========================================="
         ls -la downloads/
-        
-    - name: آپلود فایل‌ها به عنوان Artifact
+    
+    - name: آپلود به عنوان Artifact (برای دانلود راحت)
       uses: actions/upload-artifact@v4
       with:
-        name: فایل‌های-دانلودی
+        name: فایل‌های-۵۰مگابایتی
         path: downloads/
-        if-no-files-found: error
