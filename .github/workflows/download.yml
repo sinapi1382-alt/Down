@@ -34,6 +34,7 @@ jobs:
         cd downloads
         
         URL="${{ github.event.inputs.urls }}"
+        PASS="${{ github.event.inputs.password }}"
         
         echo "================================"
         echo "Downloading: $URL"
@@ -54,8 +55,8 @@ jobs:
         if [ -f "$FILENAME" ] && [ -s "$FILENAME" ]; then
           SIZE=$(du -h "$FILENAME" | cut -f1)
           
-          if [ -n "${{ github.event.inputs.password }}" ]; then
-            zip -P "${{ github.event.inputs.password }}" "download.zip" "$FILENAME"
+          if [ -n "$PASS" ]; then
+            zip -P "$PASS" "download.zip" "$FILENAME"
             echo "Created: download.zip with password"
           else
             zip "download.zip" "$FILENAME"
@@ -84,7 +85,13 @@ jobs:
         echo "----------------------------------------" >> list.txt
         ls -lh *.zip >> list.txt
         echo "" >> list.txt
-        echo "Password: ${{ github.event.inputs.password || 'No password' }}" >> list.txt
+        
+        if [ -n "$PASS" ]; then
+          echo "Password: $PASS" >> list.txt
+        else
+          echo "Password: No password" >> list.txt
+        fi
+        
         echo "Total size: $(du -sh . | cut -f1)" >> list.txt
         echo "=========================================" >> list.txt
         
