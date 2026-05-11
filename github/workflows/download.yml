@@ -1,14 +1,14 @@
-name: Downloader
+name: دانلودر حرفه‌ای
 
 on:
   workflow_dispatch:
     inputs:
       urls:
-        description: 'Download URL'
+        description: 'لینک دانلود (فقط یک لینک)'
         required: true
         type: string
       password:
-        description: 'Zip password (optional)'
+        description: 'رمز فایل زیپ (اختیاری)'
         required: false
         type: string
 
@@ -19,51 +19,79 @@ jobs:
       contents: write
     
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Install tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y aria2 zip
-      
-      - name: Download and process
-        run: |
-          rm -rf downloads
-          mkdir -p downloads
-          cd downloads
-          
-          URL="${{ inputs.urls }}"
-          PASS="${{ inputs.password }}"
-          
-          echo "Downloading: $URL"
-          
-          FILENAME=$(basename "$URL" | cut -d '?' -f1)
-          aria2c -x 16 -s 16 -o "$FILENAME" "$URL"
-          
-          if [ -f "$FILENAME" ]; then
+    - name: دریافت کدها
+      uses: actions/checkout@v4
+    
+    - name: نصب ابزارها
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y aria2 zip
+    
+    - name: اجرای دانلودر
+      run: |
+        # ساخت پوشه
+        rm -rf downloads
+        mkdir -p downloads
+        cd downloads
+        
+        # دریافت متغیرها
+        URL="${{ inputs.urls }}"
+        PASS="${{ inputs.password }}"
+        
+        echo "شروع دانلود از: $URL"
+        
+        # گرفتن نام فایل
+        FILENAME=$(basename "$URL" | cut -d '?' -f1)
+        
+        # دانلود با aria2
+        aria2c -x 16 -s 16 -o "$FILENAME" "$URL"
+        
+        # بررسی موفقیت دانلود
+        if [ -f "$FILENAME" ]; then
+            SIZE=$(du -h "$FILENAME" | cut -f1)
+            echo "دانلود شد: $FILENAME - حجم: $SIZE"
+            
+            # زیپ کردن
             if [ -n "$PASS" ]; then
-              zip -P "$PASS" "download.zip" "$FILENAME"
+                zip -P "$PASS" "download.zip" "$FILENAME"
+                echo "فایل زیپ شده با رمز"
             else
-              zip "download.zip" "$FILENAME"
+                zip "download.zip" "$FILENAME"
+                echo "فایل زیپ شده بدون رمز"
             fi
+            
+            # حذف فایل اصلی
             rm "$FILENAME"
-          fi
-          
-          echo "File list:" > list.txt
-          ls -lh >> list.txt
-          echo "Password: $PASS" >> list.txt
-          
-          cd ..
-          
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add downloads/
-          git commit -m "Add files" || echo "No changes"
-          git push
-      
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: Downloads
-          path: downloads/
+        else
+            echo "خطا در دانلود!"
+            exit 1
+        fi
+        
+        # ساخت فایل لیست
+        echo "لیست فایل‌های دانلود شده" > list.txt
+        echo "تاریخ: $(date)" >> list.txt
+        echo "لینک: $URL" >> list.txt
+        echo "رمز: ${PASS:-بدون رمز}" >> list.txt
+        echo "------------------------" >> list.txt
+        ls -lh >> list.txt
+        
+        # نمایش نتیجه
+        echo "------------------------"
+        echo "فایل‌های موجود:"
+        ls -la
+        echo "------------------------"
+        
+        cd ..
+        
+        # ذخیره در ریپازیتوری
+        git config user.name "github-actions"
+        git config user.email "actions@github.com"
+        git add downloads/
+        git commit -m "افزودن فایل‌های دانلود شده" || echo "تغییری وجود ندارد"
+        git push
+    
+    - name: آپلود artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: فایل‌های-دانلودی
+        path: downloads/
